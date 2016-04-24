@@ -3,6 +3,14 @@ import os
 import itertools
 from shutil import copyfile
 
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
+
 firmVersions={"NEW":"New3DS", "OLD":"Old3DS"}
 regions={"us": "0004000000174600", "eu": "0004000000174400", "jp": "0004000000149b00"}
 
@@ -27,6 +35,9 @@ for v in (list(itertools.product(*a))):
 
     titledir = os.path.join(romfsdir, regions[v[1]])
     savedir = os.path.join(titledir, firmVersions[v[0]])
+    
+    mkdir_p(savedir)
+    
     copyfile(os.path.join(builddir, "game_header"), os.path.join(savedir, "game_header"))
 
 os.chdir(cwd)

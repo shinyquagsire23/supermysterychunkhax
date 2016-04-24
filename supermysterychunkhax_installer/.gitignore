@@ -1,0 +1,13 @@
+# Object files
+build/
+*.o
+*.ko
+*.obj
+*.elf
+*.bin
+*.3dsx
+*.smdh
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]

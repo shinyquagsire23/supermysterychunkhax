@@ -1,0 +1,15 @@
+rop:
+	.word 0xF00FF00F
+	.word 0xF00FF00F
+	.word 0xF00FF00F
+	.word 0xF00FF00F
+	.word 0xF00FF00F
+	.word 0xF00FF00F
+	.word 0xF00FF00F
+
+	gspwn (SMD_CODE_LINEAR_BASE + (PAYLOAD_VA - 0x00100000)), SMD_DECOMP_BUFFER + 0x4000, 0x4000
+	sleep 200*1000*1000, 0
+
+	.word PAYLOAD_VA
+
+	.word 0xDEAF0000

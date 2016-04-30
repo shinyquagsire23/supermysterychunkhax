@@ -93,7 +93,7 @@ downloadFail:
 
 Result payload_update(u8* firmware_version)
 {
-    u8* buffer = &LINEAR_BUFFER[0x00200000];
+    u8* buffer = &LINEAR_BUFFER[0x00300000];
     size_t size = 0;
 
     u8* top_framebuffer = &LINEAR_BUFFER[0x00100000];
@@ -146,38 +146,22 @@ Result payload_update(u8* firmware_version)
     ret = gspwn((void*)(SMD_CODE_LINEAR_BASE + 0x00101000 - 0x00100000), buffer, (size + 0x1f) & ~0x1f);
     svcSleepThread(300*1000*1000);
 
-    Handle file;
-    ret = _FSUSER_OpenFileDirectly(fsHandle, &file, 0, ARCHIVE_SAVEDATA, PATH_EMPTY, "", 1, PATH_ASCII, "/game_header", strlen("/game_header")+1, FS_OPEN_READ, 0);
-    if(ret) return ret;
-
-    u64 save_size = 0;
-    ret = _FSFILE_GetSize(file, &save_size);
-    if(ret) return ret;
-
-    u32* save_buffer = (u32*)&LINEAR_BUFFER[0x00300000];
-    u32 btx = 0;
-    ret = _FSFILE_Read(file, &btx, 0, save_buffer, save_size);
-    if(ret) return ret;
-
-    if(save_buffer[0x8000-2] != 0xF00F0001) return -1;
-
-    memcpy(&save_buffer[0x8000], buffer, size);
-    save_buffer[0x8000-1] = size;
-
-    ret = _FSFILE_Close(file);
-    if(ret) return ret;
-
     FS_Archive save_archive = (FS_Archive){ARCHIVE_SAVEDATA, (FS_Path){PATH_EMPTY, 1, (u8*)""}};
-    ret = _FSUSER_FormatSaveData(fsHandle, save_archive.id, save_archive.lowPath, 512, 10, 10, 11, 11, true);
-    if(ret) return ret;
-
     ret = _FSUSER_OpenArchive(fsHandle, &save_archive);
     if(ret) return ret;
 
-    ret = _FSUSER_OpenFile(fsHandle, &file, 0, 0, save_archive.handle, PATH_ASCII, "/game_header", strlen("/game_header")+1, FS_OPEN_CREATE | FS_OPEN_WRITE, 0);
+    ret = _FSUSER_DeleteFile(fsHandle, save_archive, _fsMakePath(PATH_ASCII, "/payload.bin"));
     if(ret) return ret;
 
-    ret = _FSFILE_Write(file, &btx, 0, save_buffer, save_size, FS_WRITE_FLUSH | FS_WRITE_UPDATE_TIME);
+    ret = _FSUSER_ControlArchive(fsHandle, save_archive, ARCHIVE_ACTION_COMMIT_SAVE_DATA, NULL, 0, NULL, 0);
+    if(ret) return ret;
+
+    Handle file;
+    ret = _FSUSER_OpenFile(fsHandle, &file, 0, 0, save_archive.handle, PATH_ASCII, "/payload.bin", strlen("/payload.bin")+1, FS_OPEN_CREATE | FS_OPEN_WRITE, 0);
+    if(ret) return ret;
+
+    u32 btx;
+    ret = _FSFILE_Write(file, &btx, 0, (u32*)buffer, size, FS_WRITE_FLUSH | FS_WRITE_UPDATE_TIME);
     if(ret) return ret;
 
     ret = _FSFILE_Close(file);
@@ -198,10 +182,24 @@ void _main()
     _DSP_UnloadComponent(dspHandle);
     _DSP_RegisterInterruptEvents(dspHandle, 0x0, 0x2, 0x2);
 
-    // copy payload to text
-    ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
-    ret = gspwn((void*)(SMD_CODE_LINEAR_BASE + 0x00101000 - 0x00100000), (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
-    svcSleepThread(300*1000*1000);
+    Handle file;
+    ret = _FSUSER_OpenFileDirectly(fsHandle, &file, 0, ARCHIVE_SAVEDATA, PATH_EMPTY, "", 1, PATH_ASCII, "/payload.bin", strlen("/payload.bin")+1, FS_OPEN_READ, 0);
+    if(!ret)
+    {
+        u64 payload_size = 0;
+        _FSFILE_GetSize(file, &payload_size);
+
+        u32* payload_buffer = (u32*)&LINEAR_BUFFER[0x00300000];
+        u32 btx = 0;
+        _FSFILE_Read(file, &btx, 0, payload_buffer, payload_size);
+
+        _FSFILE_Close(file);
+
+        // copy payload to text
+        ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, payload_buffer, (payload_size + 0x1f) & ~0x1f);
+        ret = gspwn((void*)(SMD_CODE_LINEAR_BASE + 0x00101000 - 0x00100000), payload_buffer, (payload_size + 0x1f) & ~0x1f);
+        svcSleepThread(300*1000*1000);
+    }
 
     // ghetto dcache invalidation
     // don't judge me

@@ -17,19 +17,6 @@
 .orga 0x8000
 	.include "smd_save/smd_rop.s"
 
-.fill (0x20000-0x8 - .), 0x72
-
-.orga 0x20000-0x8
-.word 0xF00F0001 ; payload magic token for *hax
-
-.orga 0x20000-0x4
-.word 0x0 ; size, payload_end - payload_start
-
-;payload_start:
-;.orga 0x20000
-;	.incbin "payload.bin"
-;payload_end:
-
 .fill (0x32000 - .), 0x72
 
 .orga 0x32000

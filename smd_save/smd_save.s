@@ -2,6 +2,8 @@
 
 .create "build/game_header",0x0
 
+save_start:
+
 .include "smd_save/smd_constants.s"
 .include "smd_save/smd_macros.s"
 

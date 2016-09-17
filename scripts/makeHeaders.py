@@ -38,12 +38,11 @@ for a in sys.argv[2:]:
 		if len(s) > 0:
 			l.update(ast.literal_eval(s))
 
-if "FIRM_VERSION" in l and l["FIRM_VERSION"] == "NEW":
-	l["FIRM_SYSTEM_LINEAR_OFFSET"] = "0x07C00000"
-else:
-	l["FIRM_SYSTEM_LINEAR_OFFSET"] = "0x04000000"
+l["FIRM_SYSTEM_LINEAR_OFFSET_N3DS"] = "0x07C00000"
+l["FIRM_SYSTEM_LINEAR_OFFSET_O3DS"] = "0x04000000"
 	
-l["SMD_CODE_LINEAR_BASE"] = "(0x30000000 + FIRM_SYSTEM_LINEAR_OFFSET - 0x00800000)"
+l["SMD_CODE_LINEAR_BASE_N3DS"] = "(0x30000000 + FIRM_SYSTEM_LINEAR_OFFSET_N3DS - SMD_CODEBIN_SIZE)"
+l["SMD_CODE_LINEAR_BASE_O3DS"] = "(0x30000000 + FIRM_SYSTEM_LINEAR_OFFSET_O3DS - SMD_CODEBIN_SIZE)"
 
 open(sys.argv[1]+".h","w").write(outputConstantsH(l))
 open(sys.argv[1]+".s","w").write(outputConstantsS(l))

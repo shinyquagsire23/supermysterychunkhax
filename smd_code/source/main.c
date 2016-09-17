@@ -91,7 +91,7 @@ downloadFail:
     return ret;
 }
 
-Result payload_update(u8* firmware_version)
+Result payload_update(u8* firmware_version, int other_paslr_shift)
 {
     u8* buffer = &LINEAR_BUFFER[0x00200000];
     size_t size = 0;
@@ -143,7 +143,7 @@ Result payload_update(u8* firmware_version)
 
     // copy payload to text
     ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, (u32*)buffer, (size + 0x1f) & ~0x1f);
-    ret = gspwn((void*)(SMD_CODE_LINEAR_BASE + 0x00101000 - 0x00100000), buffer, (size + 0x1f) & ~0x1f);
+    ret = gspwn((void*)((*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS)) + other_paslr_shift, buffer, (size + 0x1f) & ~0x1f);
     svcSleepThread(300*1000*1000);
 
     Handle file;
@@ -165,7 +165,7 @@ Result payload_update(u8* firmware_version)
     ret = _FSFILE_Close(file);
     if(ret) return ret;
 
-    FS_Archive save_archive = (FS_Archive){ARCHIVE_SAVEDATA, (FS_Path){PATH_EMPTY, 1, (u8*)""}};
+    _FS_Archive save_archive = (_FS_Archive){ARCHIVE_SAVEDATA, (FS_Path){PATH_EMPTY, 1, (u8*)""}};
     ret = _FSUSER_FormatSaveData(fsHandle, save_archive.id, save_archive.lowPath, 512, 10, 10, 11, 11, true);
     if(ret) return ret;
 
@@ -188,17 +188,30 @@ Result payload_update(u8* firmware_version)
     return ret;
 }
 
-void _main()
+void _main(int paslr_shift)
 {
     Result ret = 0x0;
+    int other_paslr_shift = 0xF00FF00F;
 
     // un-init DSP so killing SMD will work
     _DSP_UnloadComponent(dspHandle);
     _DSP_RegisterInterruptEvents(dspHandle, 0x0, 0x2, 0x2);
+    
+    // scan for otherapp destination
+    for(int i = 0; i < SMD_CODEBIN_SIZE/0x1000; i++)
+    {
+        u32 search_check = *(u32*)(0x30000000+(i*0x1000));
+        u32 search_check2 = *(u32*)(0x30000000+(i*0x1000)+sizeof(u32));
+        if(search_check == *(u32*)0x101000 && search_check2 == *(u32*)0x101004)
+        {
+            other_paslr_shift = i*0x1000;
+            break;
+        }
+    }
 
     // copy payload to text
     ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
-    ret = gspwn((void*)(SMD_CODE_LINEAR_BASE + 0x00101000 - 0x00100000), (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
+    ret = gspwn((void*)((*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS)) + other_paslr_shift, (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
     svcSleepThread(300*1000*1000);
 
     // ghetto dcache invalidation
@@ -214,6 +227,11 @@ void _main()
     u8* low_framebuffer = &top_framebuffer[0x00046500];
     _GSPGPU_SetBufferSwap(*gspHandle, 0, (GSPGPU_FramebufferInfo){0, (u32*)top_framebuffer, (u32*)top_framebuffer, 240 * 3, (1<<8)|(1<<6)|1, 0, 0});
     _GSPGPU_SetBufferSwap(*gspHandle, 1, (GSPGPU_FramebufferInfo){0, (u32*)low_framebuffer, (u32*)low_framebuffer, 240 * 3, 1, 0, 0});
+    
+    char test_shift_buf[0x20];
+    char test_other_shift_buf[0x20];
+    hex2str(test_shift_buf, paslr_shift);
+    hex2str(test_other_shift_buf, other_paslr_shift);
 
     if(padGet() & BUTTON_SELECT)
     {
@@ -234,6 +252,11 @@ void _main()
                     drawString(top_framebuffer, "Launch *hax payload", 40, 80);
                     drawString(top_framebuffer, "Update *hax payload", 40, 88);
                     drawString(top_framebuffer, "Clear savegame", 40, 96);
+                    
+                    drawString(low_framebuffer, "Offset:", 0, 0);
+                    drawString(low_framebuffer, test_shift_buf, 0+(7*8), 0);
+                    drawString(low_framebuffer, "otherapp Offset:", 0, 16);
+                    drawString(low_framebuffer, test_other_shift_buf, 0+(16*8), 16);
 
                     while(1)
                     {
@@ -341,7 +364,7 @@ void _main()
                     drawStringColor(top_framebuffer, "                    ", 26*8, 56, 0x000000);
                     drawStringColor(top_framebuffer, "                    ", 26*8, 72, 0x000000);
 
-                    ret = payload_update(firmware_version);
+                    ret = payload_update(firmware_version, other_paslr_shift);
                     if(!ret)
                         centerString(top_framebuffer, "Successfully updated payload!", 96, 400);
                     else
@@ -369,7 +392,7 @@ updateFail:
 
                     centerString(top_framebuffer, "Clearing savegame...", 40, 400);
 
-                    FS_Archive save_archive = (FS_Archive){ARCHIVE_SAVEDATA, (FS_Path){PATH_EMPTY, 1, (u8*)""}};
+                    _FS_Archive save_archive = (_FS_Archive){ARCHIVE_SAVEDATA, (FS_Path){PATH_EMPTY, 1, (u8*)""}};
                     ret = _FSUSER_FormatSaveData(fsHandle, save_archive.id, save_archive.lowPath, 512, 10, 10, 11, 11, true);
                     hex2str(buf, ret);
 
@@ -393,12 +416,15 @@ updateFail:
                     state = 0;
                     break;
             }
-
+            _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, &LINEAR_BUFFER[0x00100000], 0x100000);
 
             if(exiting)
                 break;
         }
     }
+    
+    // Invalidate otherapp area before jumping
+    ret = _GSPGPU_InvalidateDataCache(gspHandle, 0xFFFF8001, (void*)0x00101000, (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
 
     // run payload
     {

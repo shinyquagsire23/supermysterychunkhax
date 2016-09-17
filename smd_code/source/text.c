@@ -48,6 +48,8 @@ void drawStringColor(u8* fb, char* str, u16 x, u16 y, u32 color)
         dx+=8;
         if(str[k]=='\n'){dx=0;dy-=8;}
     }
+    
+    _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, (u32*)&LINEAR_BUFFER[0x00100000], (400*240*3)+(320*240*3));
 }
 
 void centerString(u8* fb, char* str, u16 y, u16 screen_x)

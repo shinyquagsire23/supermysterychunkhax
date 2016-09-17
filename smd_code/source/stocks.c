@@ -7,6 +7,7 @@
 #include <3ds/services/gspgpu.h>
 
 #include "imports.h"
+#include "stocks.h"
 
 void *memset(void * ptr, int value, size_t num)
 {
@@ -114,7 +115,7 @@ FS_Path _fsMakePath(FS_PathType type, const void* path)
     return p;
 }
 
-Result _FSUSER_OpenArchive(Handle *handle, FS_Archive *archive)
+Result _FSUSER_OpenArchive(Handle *handle, _FS_Archive *archive)
 {
     if(!archive)
         return -2;
@@ -137,7 +138,7 @@ Result _FSUSER_OpenArchive(Handle *handle, FS_Archive *archive)
     return cmdbuf[1];
 }
 
-/*Result _FSUSER_OpenFile(Handle* handle, Handle* out, FS_Archive archive, FS_Path fileLowPath, u32 openflags, u32 attributes)
+/*Result _FSUSER_OpenFile(Handle* handle, Handle* out, _FS_Archive archive, FS_Path fileLowPath, u32 openflags, u32 attributes)
 {
     u32* cmdbuf=getThreadCommandBuffer();
 
@@ -160,7 +161,7 @@ Result _FSUSER_OpenArchive(Handle *handle, FS_Archive *archive)
     return cmdbuf[1];
 }*/
 
-/*Result _FSUSER_OpenFileDirectly(Handle* handle, Handle* out, FS_Archive archive, FS_Path fileLowPath, u32 openflags, u32 attributes)
+/*Result _FSUSER_OpenFileDirectly(Handle* handle, Handle* out, _FS_Archive archive, FS_Path fileLowPath, u32 openflags, u32 attributes)
 {
     u32* cmdbuf=getThreadCommandBuffer();
 
@@ -253,7 +254,7 @@ Result _FSFILE_Write(Handle handle, u32 *bytesWritten, u64 offset, u32 *data, u3
 
 Result
 _FSUSER_DeleteFile(Handle     *handle,
-                  FS_Archive archive,
+                  _FS_Archive archive,
                   FS_Path    fileLowPath)
 {
     u32 *cmdbuf = getThreadCommandBuffer();
@@ -274,7 +275,7 @@ _FSUSER_DeleteFile(Handle     *handle,
     return cmdbuf[1];
 }
 
-Result _FSUSER_ControlArchive(Handle *handle, FS_Archive archive, FS_ArchiveAction action, void* input, u32 inputSize, void* output, u32 outputSize)
+Result _FSUSER_ControlArchive(Handle *handle, _FS_Archive archive, FS_ArchiveAction action, void* input, u32 inputSize, void* output, u32 outputSize)
 {
     u32* cmdbuf=getThreadCommandBuffer();
 
@@ -318,7 +319,7 @@ Result _FSUSER_FormatSaveData(Handle* handle, FS_ArchiveID archiveId, FS_Path pa
     return cmdbuf[1];
 }
 
-Result _FSUSER_CloseArchive(Handle* handle, FS_Archive* archive)
+Result _FSUSER_CloseArchive(Handle* handle, _FS_Archive* archive)
 {
     if(!archive)return -2;
     u32* cmdbuf=getThreadCommandBuffer();

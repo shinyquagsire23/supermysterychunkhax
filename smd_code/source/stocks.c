@@ -9,6 +9,19 @@
 #include "imports.h"
 #include "stocks.h"
 
+int _memcmp(void *str1, void *str2, size_t n)
+{
+    for (; n--; str1++, str2++) 
+    {
+	    if (*(u8*)(str1) != *(u8*)(str2)) 
+	    {
+	        return (*(u8*)(str1)-*(u8*)(str2));
+	    }
+    }
+    return 0;
+}
+
+
 void *memset(void * ptr, int value, size_t num)
 {
     u8 *p = ptr;

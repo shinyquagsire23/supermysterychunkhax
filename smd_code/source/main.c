@@ -91,7 +91,7 @@ downloadFail:
     return ret;
 }
 
-Result payload_update(u8* firmware_version, int other_paslr_shift)
+Result payload_update(u8* firmware_version, int* otherapp_shifts)
 {
     u8* buffer = &LINEAR_BUFFER[0x00200000];
     size_t size = 0;
@@ -142,9 +142,17 @@ Result payload_update(u8* firmware_version, int other_paslr_shift)
     if(ret) return ret;
 
     // copy payload to text
-    ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, (u32*)buffer, (size + 0x1f) & ~0x1f);
-    ret = gspwn((void*)((*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS)) + other_paslr_shift, buffer, (size + 0x1f) & ~0x1f);
-    svcSleepThread(300*1000*1000);
+    ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, buffer, (size + 0x1f) & ~0x1f);
+    for(int i = 0; i < 0xC; i++)
+    {
+        if(otherapp_shifts[i] == 0xF00FF00F)
+            break;
+        
+        gspwn((void*)(*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS) + otherapp_shifts[i], (void*)(buffer + (i*0x1000)), 0x00001000);
+        svcSleepThread(30 * 1000 * 1000);
+                
+        _GSPGPU_InvalidateDataCache(gspHandle, 0xFFFF8001, (void*)(*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS) + otherapp_shifts[i], 0x1000);
+    }
 
     Handle file;
     ret = _FSUSER_OpenFileDirectly(fsHandle, &file, 0, ARCHIVE_SAVEDATA, PATH_EMPTY, "", 1, PATH_ASCII, "/game_header", strlen("/game_header")+1, FS_OPEN_READ, 0);
@@ -191,28 +199,41 @@ Result payload_update(u8* firmware_version, int other_paslr_shift)
 void _main(int paslr_shift)
 {
     Result ret = 0x0;
-    int other_paslr_shift = 0xF00FF00F;
+    
+    int otherapp_shifts[0xC];
+    for(int i = 0; i < 0xC; i++)
+        otherapp_shifts[i] = 0xF00FF00F;
 
     // un-init DSP so killing SMD will work
     _DSP_UnloadComponent(dspHandle);
     _DSP_RegisterInterruptEvents(dspHandle, 0x0, 0x2, 0x2);
-    
-    // scan for otherapp destination
-    for(int i = 0; i < SMD_CODEBIN_SIZE/0x1000; i++)
+
+    // scan for shifts
+    int k = 0;
+    for(int i = 0; i < SMD_CODEBIN_SIZE && k < 0xC; i += 0x1000)
     {
-        u32 search_check = *(u32*)(0x30000000+(i*0x1000));
-        u32 search_check2 = *(u32*)(0x30000000+(i*0x1000)+sizeof(u32));
-        if(search_check == *(u32*)0x101000 && search_check2 == *(u32*)0x101004)
+        for(int j = 0; j < 0x0000C000; j += 0x1000)
         {
-            other_paslr_shift = i*0x1000;
-            break;
+            if(!_memcmp((void*)(0x30000000 + i), (void*)(0x101000 + j), 0x20))
+            {
+                otherapp_shifts[k++] = i;
+                break;
+            } 
         }
     }
-
-    // copy payload to text
+    
+    // gspwn otherapp
     ret = _GSPGPU_FlushDataCache(gspHandle, 0xFFFF8001, (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
-    ret = gspwn((void*)((*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS)) + other_paslr_shift, (void*)(SMD_COMP_BUFFER+0x20000), (*(u32*)(SMD_COMP_BUFFER+0x20000-0x4) + 0x1f) & ~0x1f);
-    svcSleepThread(300*1000*1000);
+    for(int i = 0; i < 0xC; i++)
+    {
+        if(otherapp_shifts[i] == 0xF00FF00F)
+            break;
+        
+        gspwn((void*)(*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS) + otherapp_shifts[i], (void*)((SMD_COMP_BUFFER+0x20000) + (i*0x1000)), 0x00001000);
+        svcSleepThread(30 * 1000 * 1000);
+                
+        _GSPGPU_InvalidateDataCache(gspHandle, 0xFFFF8001, (void*)(*(u32*)SMD_APPMEMTYPE == 0x6 ? SMD_CODE_LINEAR_BASE_N3DS : SMD_CODE_LINEAR_BASE_O3DS) + otherapp_shifts[i], 0x1000);
+    }
 
     // ghetto dcache invalidation
     // don't judge me
@@ -229,9 +250,13 @@ void _main(int paslr_shift)
     _GSPGPU_SetBufferSwap(*gspHandle, 1, (GSPGPU_FramebufferInfo){0, (u32*)low_framebuffer, (u32*)low_framebuffer, 240 * 3, 1, 0, 0});
     
     char test_shift_buf[0x20];
-    char test_other_shift_buf[0x20];
+    char test_other_shift_buf[0x100];
+    char test_other_shift_buf2[0x100];
+    char test_other_shift_buf3[0x100];
     hex2str(test_shift_buf, paslr_shift);
-    hex2str(test_other_shift_buf, other_paslr_shift);
+    sprintf(test_other_shift_buf, "%08x %08x %08x %08x", otherapp_shifts[0], otherapp_shifts[1], otherapp_shifts[2], otherapp_shifts[3]);
+    sprintf(test_other_shift_buf2, "%08x %08x %08x %08x", otherapp_shifts[4], otherapp_shifts[5], otherapp_shifts[6], otherapp_shifts[7]);
+    sprintf(test_other_shift_buf3, "%08x %08x %08x %08x", otherapp_shifts[8], otherapp_shifts[9], otherapp_shifts[0xA], otherapp_shifts[0xB]);
 
     if(padGet() & BUTTON_SELECT)
     {
@@ -254,9 +279,11 @@ void _main(int paslr_shift)
                     drawString(top_framebuffer, "Clear savegame", 40, 96);
                     
                     drawString(low_framebuffer, "Offset:", 0, 0);
-                    drawString(low_framebuffer, test_shift_buf, 0+(7*8), 0);
-                    drawString(low_framebuffer, "otherapp Offset:", 0, 16);
-                    drawString(low_framebuffer, test_other_shift_buf, 0+(16*8), 16);
+                    drawString(low_framebuffer, test_shift_buf, 0, 8);
+                    drawString(low_framebuffer, "otherapp offsets:", 0, 24);
+                    drawString(low_framebuffer, test_other_shift_buf, 0, 32);
+                    drawString(low_framebuffer, test_other_shift_buf2, 0, 40);
+                    drawString(low_framebuffer, test_other_shift_buf3, 0, 48);
 
                     while(1)
                     {
@@ -364,7 +391,7 @@ void _main(int paslr_shift)
                     drawStringColor(top_framebuffer, "                    ", 26*8, 56, 0x000000);
                     drawStringColor(top_framebuffer, "                    ", 26*8, 72, 0x000000);
 
-                    ret = payload_update(firmware_version, other_paslr_shift);
+                    ret = payload_update(firmware_version, otherapp_shifts);
                     if(!ret)
                         centerString(top_framebuffer, "Successfully updated payload!", 96, 400);
                     else

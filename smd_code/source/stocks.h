@@ -44,5 +44,6 @@ Result _HTTPC_GetResponseHeader(Handle* handle, Handle contextHandle, char* name
 
 int _strlen(const char* str);
 void *memset(void * ptr, int value, size_t num);
+int _memcmp(void *str1, void *str2, size_t n);
 
 #endif
